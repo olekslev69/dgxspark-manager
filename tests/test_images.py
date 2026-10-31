@@ -80,3 +80,29 @@ def test_images_overview_reports_unreachable_host(setup, monkeypatch):  # noqa: 
     client.post("/api/recipes", json=recipe_body(name="C", image="vllm/vllm-openai:v0.11.0", host_id=mac["id"]))
     [row] = client.get("/api/images").json()["images"][0]["hosts"]
     assert row["state"] == "unknown" and "Docker daemon" in row["error"]
+
+
+def test_image_check_endpoint(setup):  # noqa: F811
+    client, _, hub_docker, mac_docker, mac = setup
+    local = client.get("/api/hosts").json()[0]
+    hub_docker.images = [img("lmsysorg/sglang", "qwen38-27b", "2026-10-01T10:00:00+00:00")]
+    data = client.get("/api/images/check", params={"host_id": local["id"], "image": "lmsysorg/sglang:qwen38-27b"}).json()
+    assert data["state"] == "present" and data["local"]["tag"] == "qwen38-27b"
+    data = client.get("/api/images/check", params={"host_id": local["id"], "image": "lmsysorg/sglang:spark"}).json()
+    assert data["state"] == "missing" and [t["tag"] for t in data["other_tags"]] == ["qwen38-27b"]
+    mac_docker.images = [img("lmsysorg/sglang", "spark", "2026-10-02T10:00:00+00:00")]
+    data = client.get("/api/images/check", params={"host_id": mac["id"], "image": "lmsysorg/sglang:spark"}).json()
+    assert data["state"] == "present"
+    assert client.get("/api/images/check", params={"host_id": 999, "image": "busybox"}).status_code == 404
+    assert client.get("/api/images/check", params={"host_id": local["id"], "image": "not an image"}).status_code == 422
+
+
+def test_image_check_reports_unreachable_host(setup, monkeypatch):  # noqa: F811
+    client, _, _, mac_docker, mac = setup
+
+    async def broken():
+        raise RuntimeError("Cannot connect to the Docker daemon")
+
+    monkeypatch.setattr(mac_docker, "list_images", broken)
+    data = client.get("/api/images/check", params={"host_id": mac["id"], "image": "vllm/vllm-openai:v0.32.0"}).json()
+    assert data["state"] == "unknown" and "Docker daemon" in data["error"]

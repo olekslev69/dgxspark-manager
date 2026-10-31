@@ -1,0 +1,18 @@
+# Compact recipe file (Local LLM Manager): paste into Recipes -> Import.
+name: hermes-agent-docker
+description: Hermes Agent 1
+framework: custom
+image: nousresearch/hermes-agent
+command: gateway run
+docker_args: ''
+env: |-
+  TELEGRAM_BOT_TOKEN
+  TELEGRAM_ALLOWED_USERS
+  EINFACHLLM_API_KEY
+  HERMES_LOCAL_STT_LANGUAGE=de
+  HERMES_UID=1000
+  HERMES_GID=1000
+volumes: ~/.hermes:/opt/data
+host_port: 8198
+container_port: 8198
+kind: agent

@@ -206,3 +206,30 @@ def test_missing_modern_bash_gives_a_clear_error(monkeypatch):
     monkeypatch.setattr(importer, "find_bash", lambda: None)
     with pytest.raises(importer.ScriptImportError, match="brew install bash"):
         asyncio.run(importer.import_script("docker run img"))
+
+
+def test_mounts_and_manager_labels_are_integrated_into_the_recipe():
+    text = """docker run -d --name m \
+      --label local-llm-manager=1 --label local-llm-manager.recipe=7 --label team=llm \
+      --mount type=bind,source=/models/qwen,target=/model,readonly \
+      --mount type=volume,source=cache,target=/cache \
+      -e HF_TOKEN vllm/vllm-openai --model /model --port 8000
+"""
+    res = run_import(text)
+    r = res["recipe"]
+    # Bind mounts become editable volume lines (so {weights} can replace the host path).
+    assert r["volumes"] == "/models/qwen:/model:ro"
+    # The manager adds its own labels; other labels and named volumes stay Docker arguments.
+    assert "local-llm-manager" not in r["docker_args"]
+    assert "--label team=llm" in r["docker_args"]
+    assert "--mount type=volume,source=cache,target=/cache" in r["docker_args"]
+    assert any("simple bind mounts" in w for w in res["warnings"])
+
+
+def test_bind_mount_with_extra_options_stays_a_docker_argument():
+    text = ("docker run --mount type=bind,source=/models/qwen,target=/model,"
+            "bind-propagation=rshared img --model /model\n")
+    r = run_import(text)["recipe"]
+    assert r["volumes"] == ""
+    assert ("--mount type=bind,source=/models/qwen,target=/model,"
+            "bind-propagation=rshared") in r["docker_args"]

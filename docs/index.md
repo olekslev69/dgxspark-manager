@@ -6,8 +6,8 @@ silicon, or any Linux box – from any browser on your network.
 ![Model recipes, dark theme](screenshots/recipes-dark.png)
 
 - **Recipes** save how to start a model server (vLLM, SGLang, llama.cpp, TensorFold or any image /
-  native binary), as a Docker container or a native process. You can also import an existing start script or
-  `docker run` command.
+  native binary), as a Docker container or a native process. You can also import an existing start script,
+  `docker run` command or compact JSON/YAML recipe file, and export any recipe the same way.
 - **Start, stop, restart or "switch to"** a model. Switching stops the other models on that machine and
   frees memory first.
 - **Live status, logs and stats:** loading / ready / failed, tokens per second, running requests and

@@ -115,6 +115,21 @@ class Manager:
         native = sum(1 for r in self.db.list_recipes() if r.get("runtime") == "process")
         return {"images": images, "native_recipes": native}
 
+    async def image_status(self, image: str, host_id: int) -> dict[str, Any]:
+        """Whether one Docker image is present on one host (recipe editor checks this as you type)."""
+        repo, tag = split_image(image)
+        try:
+            images = await self.executor_for(host_id).images()
+        except ActionError as e:
+            return {"image": image, "repository": repo, "tag": tag, "host_id": host_id,
+                    "state": "unknown", "local": None, "other_tags": [], "error": e.message}
+        same_repo = [i for i in images if i["repository"] == repo]
+        mine = next((i for i in same_repo if i["tag"] == tag), None)
+        others = sorted((i for i in same_repo if i["tag"] != tag), key=lambda i: _created(i), reverse=True)
+        return {"image": image, "repository": repo, "tag": tag, "host_id": host_id,
+                "state": "present" if mine else "missing", "local": mine,
+                "other_tags": others, "error": None}
+
     async def copy_check(self, recipe: dict, host_ids: list[int]) -> list[dict[str, Any]]:
         """What copying a recipe to other hosts would meet there: whether its weights and image are on
         each host, other recipes on the same port, and a copy that is there already."""

@@ -25,6 +25,7 @@ from . import __version__, config, system
 from .db import Database, normalize_tags
 from .docker import Docker
 from .importer import ScriptImportError, import_script
+from .recipefile import RecipeFileError, compact_recipe, dump_recipe_file, parse_recipe_file, recipe_from_file
 from .script_check import check_script
 from .manager import ActionError, Manager
 from .processes import ProcessRunner
@@ -594,6 +595,16 @@ def create_app(db: Optional[Database] = None, docker: Optional[Docker] = None,
     async def images():
         return await manager.images_overview()
 
+    @app.get("/api/images/check")
+    async def image_check(host_id: int, image: str):
+        """Whether a Docker image is present on one host (the recipe editor asks this as you type)."""
+        get_host_or_404(host_id)
+        try:
+            image = check_image(image)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        return await manager.image_status(image, host_id)
+
     @app.get("/api/models")
     async def models():
         return await manager.models_overview()
@@ -1088,18 +1099,33 @@ def create_app(db: Optional[Database] = None, docker: Optional[Docker] = None,
     @app.post("/api/recipes/import/check")
     async def check_import(body: ImportIn):
         """Static review of a script before importing it. Nothing is executed."""
+        if parse_recipe_file(body.text) is not None:
+            return {"count": 0, "findings": []}
         return check_script(body.text)
 
     @app.post("/api/recipes/import")
     async def import_recipe(body: ImportIn):
-        """Parse a starter script / docker run command into an unsaved recipe draft."""
-        check = check_script(body.text)
-        if check["count"] and not body.trust:
-            raise HTTPException(422, "The script contains risky calls. Review them and confirm that you trust the script.")
-        try:
-            result = await import_script(body.text)
-        except ScriptImportError as e:
-            raise HTTPException(422, str(e))
+        """Parse a starter script, `docker run` command or compact JSON/YAML recipe into a draft."""
+        data = parse_recipe_file(body.text)
+        if data is not None:
+            try:
+                recipe, warnings = recipe_from_file(data, db.list_weights())
+            except RecipeFileError as e:
+                raise HTTPException(422, str(e))
+            result = {"recipe": recipe, "warnings": warnings, "docker_argv": None, "process_argv": None,
+                      "skipped_calls": [], "check": {"count": 0, "findings": []}}
+        else:
+            check = check_script(body.text)
+            if check["count"] and not body.trust:
+                raise HTTPException(422, "The script contains risky calls. Review them and confirm that you trust the script.")
+            try:
+                result = await import_script(body.text)
+            except ScriptImportError as e:
+                raise HTTPException(422, str(e))
+            result["check"] = check
+            if check["count"]:
+                db.add_event("user", "import", True, "Imported a script with risky calls after confirmation:\n"
+                             + "\n".join(f"line {f['line']}: {f['message']}" for f in check["findings"]))
         recipe = result["recipe"]
         existing = db.list_recipes()
         names = {r["name"] for r in existing}
@@ -1112,11 +1138,32 @@ def create_app(db: Optional[Database] = None, docker: Optional[Docker] = None,
             while recipe["container_name"] in containers:
                 recipe["container_name"], i = f"{base}-{i}", i + 1
             result["warnings"].append(f"Container name changed to {recipe['container_name']} (already used)")
-        result["check"] = check
-        if check["count"]:
-            db.add_event("user", "import", True, "Imported a script with risky calls after confirmation:\n"
-                         + "\n".join(f"line {f['line']}: {f['message']}" for f in check["findings"]))
         return result
+
+    def export_text(recipe: dict[str, Any], fmt: str) -> str:
+        try:
+            weight = db.get_weight(recipe.get("weights_id"))
+            data = compact_recipe(recipe, weight["name"] if weight else None)
+            return dump_recipe_file(data, fmt)
+        except RecipeFileError as e:
+            raise HTTPException(422, str(e))
+
+    @app.get("/api/recipes/{recipe_id}/export")
+    async def export_recipe(recipe_id: int, format: str = "yaml"):
+        """The saved recipe as a compact JSON/YAML file (omitted settings come from its preset)."""
+        fmt = format.strip().lower()
+        text = export_text(get_recipe_or_404(recipe_id), fmt)
+        return Response(text, media_type="application/json" if fmt == "json" else "text/yaml")
+
+    @app.post("/api/recipes/export")
+    async def export_recipe_body(body: RecipeIn, recipe_id: Optional[int] = None, format: str = "yaml"):
+        """Export the editor's current settings, also before the recipe is saved."""
+        recipe = body.model_dump()
+        if recipe_id is not None:
+            recipe["id"] = recipe_id
+        fmt = format.strip().lower()
+        text = export_text(recipe, fmt)
+        return Response(text, media_type="application/json" if fmt == "json" else "text/yaml")
 
     @app.post("/api/recipes/{recipe_id}/start")
     async def start(recipe_id: int, force: bool = False):

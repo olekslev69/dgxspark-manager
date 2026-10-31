@@ -7,6 +7,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Compact recipe files (JSON/YAML):** Recipes → Import now accepts the editor's own fields as a JSON or
+  YAML file, not just a starter script / `docker run` command. Missing settings come from the framework
+  preset, so a file only lists what differs; `weights:` names a registered entry and `port:` sets the host
+  port. Volumes, environment, extra Docker flags, command and server arguments are all fields, so even a
+  complicated start script can be represented completely. **Recipe file…** in the editor exports the
+  current recipe in the same format, ready for another manager or `examples/recipes`. Importing a
+  `docker run` now turns a simple `--mount type=bind` into an editable volume line (more complex mounts
+  stay Docker arguments), drops the manager's own labels, and warns about `--env-file` and non-bind
+  mounts. New `GET /api/recipes/{id}/export` and `POST /api/recipes/export`.
 - **Machines can ask to be added:** with `DGXM_HUB_URL` in an agent's `.env`, the agent announces itself to
   the hub, which lists it under **Hosts → Asking to be added** (with a counter on the Hosts tab). Approve
   it with **Codes match – add** when the hub shows the same join code as the machine (installer output,
@@ -124,8 +133,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   framework re-save (the API rejects the old keys).
 - **Recipe editor:** the command preview sits in its own column beside the form and stays in view while
   you scroll (stacked below it on narrow screens), shows docker's and the framework's flags in two colours,
-  and has a Copy button. Importing is easier to find: an "📋 Import docker run / script…" button on the
-  Recipes tab (shortcut `i`), a highlighted button in the editor head, and a prompt at the top of a new recipe.
+  and has a Copy button. The Docker image field checks as you type whether the selected host already has
+  the image (and which other tags of it it has). The Recipes tab now has a single **＋ Add recipe** button
+  (shortcut `i`) that opens the import dialog; **Start from scratch** and **use Quick recipe** are links
+  there, the editor head still has a highlighted import button, and a new recipe shows a prompt at the top.
 - **Model cards:** "Model" shows the mounted folder's name instead of a container path like `/model`
   (full path in the tooltip), plus the `--served-model-name` clients use, the image (shortened) and a
   copy button for the endpoint. Start/Stop stay on the left; Duplicate and Delete are icon buttons.

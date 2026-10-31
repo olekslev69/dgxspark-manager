@@ -1,0 +1,14 @@
+# Qwen3.8 27B served by SGLang.
+# Register the weights as "Qwen3.8-27B-NVFP4" in the Weights tab (or change `weights:` below).
+# Paste this file into Recipes -> Import; the SGLang preset fills in the command,
+# Docker flags, Hugging Face cache volume and HF_TOKEN.
+# Same endpoint and served model name as qwen38-27b.yaml, so agents can switch frameworks.
+name: qwen3.8-sglang
+framework: sglang
+weights: Qwen3.8-27B-NVFP4
+host_port: 8101
+args: |
+  --mem-fraction-static 0.4
+  --context-length 226000
+  --max-running-requests 8
+  --served-model-name qwen3.8

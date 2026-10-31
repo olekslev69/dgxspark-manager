@@ -11,10 +11,12 @@ silicon, or any Linux box - from any browser on your network:
 
 📖 **Documentation:** [einfachllm.github.io/local-llm-manager](https://einfachllm.github.io/local-llm-manager/) – start with the Quick start and Several machines.
 
-- **⚡ Quick recipe:** pick the weights and a recipe that already works (or an engine default) - the new
-  model gets the same image, flags and caches, its own name and endpoint, in one click.
+- **＋ Add recipe:** one button to import a starter script, `docker run` command or compact JSON/YAML
+  recipe file, start from scratch, or use **Quick recipe** - pick the weights and a recipe that already
+  works (or an engine default); the new model gets the same image, flags and caches, its own name and
+  endpoint, in one click.
 - **Recipes:** save how to start a model server (vLLM, SGLang, llama.cpp, TensorFold or any image / native binary),
-  as a Docker container or as a native process. Or import an existing starter script / `docker run` command.
+  as a Docker container or as a native process.
 - **Start, stop, restart, or "switch to"** a model (stops the others on that machine and frees memory first).
 - **Agents next to models:** run the programs that use your models - e.g. a [Hermes Agent](examples/hermes-agent/)
   Telegram gateway - as recipes too. They get their own section per host (🤖 above 🧠), keep running when you
@@ -185,9 +187,11 @@ command; change it to `--host {bind_host}` for native-process and `--network hos
   recipes.
 - **Native process** recipes run the command directly on the machine (needed for MLX on a Mac). Output
   goes to `data/processes/<name>.log`, and processes keep running if the manager restarts.
-- **Import script…** fills a recipe from a starter script by running it with bash in a restricted mode
-  that only records `docker run` / the server command and skips other commands. It is not a sandbox:
-  *Check script* lists risky lines first - only import scripts you trust.
+- **Import** fills a recipe from a starter script by running it with bash in a restricted mode that only
+  records `docker run` / the server command and skips other commands. It is not a sandbox: *Check*
+  lists risky lines first - only import scripts you trust. It also accepts a **compact JSON/YAML recipe
+  file** (the editor's fields; missing settings come from the framework preset), and **Recipe file…** in
+  the editor exports the current recipe that way - volumes, environment and extra Docker flags included.
 - Live stats come from the server's `/metrics` endpoint: on by default in vLLM, add `--enable-metrics`
   for SGLang and `--metrics` for llama.cpp.
 - Starting is refused if the port is already in use on that machine.
