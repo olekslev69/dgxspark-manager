@@ -271,3 +271,13 @@ def test_an_explicit_model_with_a_weights_mount_at_another_target_warns():
                                    [{"id": 1, "name": "w"}])
     assert r["model"] == "/custom"
     assert any("not mounted" in w for w in warnings)
+
+
+def test_a_model_inside_a_weights_folder_is_considered_mounted():
+    r, warnings = recipe_from_file({"framework": "vllm", "weights": "w",
+                                    "model": "/models/Nemotron-3.5-Super-VL",
+                                    "volumes": "{weights}:/models:ro"},
+                                   [{"id": 1, "name": "w"}])
+    assert warnings == []
+    assert r["model"] == "/models/Nemotron-3.5-Super-VL"
+    assert r["volumes"] == "{weights}:/models:ro"

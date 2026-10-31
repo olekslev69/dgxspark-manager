@@ -182,13 +182,18 @@ def recipe_from_file(data: dict[str, Any], registered_weights: Optional[list[dic
         parts = line.split(":", 2)
         return parts[1].rstrip("/") if len(parts) > 1 else ""
 
+    def mounted_at(target: str, path: str) -> bool:
+        """The model is the mount target or lies inside it (e.g. /models/main under /models)."""
+        target, path = target.rstrip("/"), path.rstrip("/")
+        return bool(target) and (path == target or path.startswith(target + "/"))
+
     if ((weight or weights_name) and runtime == "docker" and not model_given
             and kind != "agent" and weights_mounts):
         # `weights:` plus a {weights} volume but no model: use the volume's target.
         target = next((t for t in map(mount_target, weights_mounts) if t), "")
         model = target or model
     if (weight or weights_name) and runtime == "docker" and model.startswith("/"):
-        mounted = any(mount_target(line) == model.rstrip("/") for line in weights_mounts)
+        mounted = any(mounted_at(mount_target(line), model) for line in weights_mounts)
         if not mounted and not model_given:
             # `weights:` alone means the usual {weights}:/model:ro mount.
             volumes = "\n".join([f"{WEIGHTS}:{model}:ro"] + volumes.splitlines())
