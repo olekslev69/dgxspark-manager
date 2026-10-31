@@ -6,7 +6,7 @@
 name: qwen3.8-sglang
 framework: sglang
 weights: Qwen3.8-27B-NVFP4
-port: 8101
+host_port: 8101
 args: |
   --mem-fraction-static 0.4
   --context-length 226000

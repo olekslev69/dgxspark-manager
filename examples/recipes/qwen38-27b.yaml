@@ -6,7 +6,7 @@ name: qwen3.8
 framework: vllm
 image: vllm/vllm-openai:v0.32.0
 weights: Qwen3.8-27B-NVFP4
-port: 8101
+host_port: 8101
 args: |
   --gpu-memory-utilization 0.4
   --max-model-len 226000

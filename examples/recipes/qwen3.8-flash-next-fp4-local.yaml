@@ -1,6 +1,9 @@
-# Compact recipe file (Local LLM Manager): paste into Recipes -> Import.
+# Qwen3.8-Flash-Next-FP4 served by SGLang, with the manager's own settings.
+# Register the weights as "Qwen3.8-Flash-Next-FP4-Local" in the Weights tab, or change `weights:`.
+# Paste this file into Recipes -> Import; the SGLang preset fills in the command,
+# Docker flags, Hugging Face cache volume and HF_TOKEN.
 name: Qwen3.8-Flash-Next-FP4-Local
-description: Settings from Qwen3-8B (SGLang).
+description: Qwen3.8-Flash-Next-FP4 on SGLang (32k context).
 framework: sglang
 args: |-
   --mem-fraction-static 0.4

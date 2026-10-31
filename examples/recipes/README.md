@@ -9,7 +9,7 @@ Two formats are accepted:
   `env`, `volumes`, `docker_args`, command, health path, tags. Missing settings come from the framework
   preset, so only what differs is written down. `weights:` names a registered Weights-tab entry (its
   per-host path fills `{weights}`); omit `model:` for the usual `/model` mount, or set it to another path.
-  `port:` is shorthand for the host port. `args`, `env`, `volumes` and `docker_args` can be multi-line
+  `host_port:` is the port on the host (`port:` is shorthand for it). `args`, `env`, `volumes` and `docker_args` can be multi-line
   strings or lists. Everything a complicated start script needs - bind mounts, environment, extra Docker
   flags, entrypoint, server arguments - has a field, so importing the file gives the same container again.
 - **`.sh` - starter scripts / `docker run` commands.** The manager checks the script, runs it with bash in
@@ -24,10 +24,8 @@ folder.
 |---|---|
 | [`qwen38-27b.yaml`](qwen38-27b.yaml) | Qwen3.8 27B served by vLLM - a small compact recipe with registered weights. |
 | [`qwen38-27b-sglang.yaml`](qwen38-27b-sglang.yaml) | The same 27B model on SGLang: same port and served model name as the vLLM recipe. |
-| [`qwen3.8.yaml`](qwen3.8.yaml) | The same 27B recipe exported from the manager; it uses `{weights}`, so pick the entry after importing. |
 | [`qwen38-flash-next-fp4.yaml`](qwen38-flash-next-fp4.yaml) | Qwen3.8-Flash-Next-FP4 on an NVIDIA DGX Spark (GB10, SM121): b12x image, tuned flags, caches, tool calling. Compact form. |
-| [`qwen38-flash-next-fp4-sglang.yaml`](qwen38-flash-next-fp4-sglang.yaml) | SGLang drop-in for the vLLM Flash example: same port and served model name, conservative 32k context. |
-| [`qwen3.8-flash-next-fp4-local.yaml`](qwen3.8-flash-next-fp4-local.yaml) | The manager's exported SGLang recipe for the same weights (port 8110). |
+| [`qwen3.8-flash-next-fp4-local.yaml`](qwen3.8-flash-next-fp4-local.yaml) | The same Flash weights on SGLang: conservative 32k context, own port 8110. |
 | [`qwen38-flash-next-fp4.sh`](qwen38-flash-next-fp4.sh) | The same model as a `docker run` starter script. |
 | [`hermes-agent-docker.yaml`](hermes-agent-docker.yaml) | A Hermes Agent gateway as an agent recipe: its own port and data volume, no model or GPU. |
 
@@ -37,7 +35,7 @@ folder.
   Create it in the **Weights** tab with the folder on each host that runs the recipe, or change the name in
   the file. Starter scripts mount a concrete folder; download the model there, or point the volume at your
   copy. "Search hosts" in the **Weights** tab finds model folders under `DGXM_MODEL_DIR` and registers them.
-- **Ports:** the port in `port:` / `--port` becomes the recipe's port. Keep it the **same across models**
+- **Ports:** the port in `host_port:` / `port:` / `--port` becomes the recipe's port. Keep it the **same across models**
   you want to switch between, and give each `--served-model-name` a stable short name - then **Switch to**
   changes the model and your agents keep the same endpoint `http://<host>:<port>/v1`.
 - **Secrets:** files list only bare names (e.g. `HF_TOKEN`); put the values in the manager's `.env` (see
