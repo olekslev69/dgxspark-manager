@@ -67,7 +67,7 @@ and restart the service.
 
 ## 3. Start your first model
 
-1. Click **⚡ Quick recipe** (shortcut `q`).
+1. Click **＋ Add recipe** (shortcut `i`), then **use Quick recipe** in the dialog (shortcut `q`).
 2. Pick the **Model**: a folder or `.gguf` found in `DGXM_MODEL_DIR` on the host, registered weights, or a
    Hugging Face id such as `Qwen/Qwen3-8B`.
 3. Pick **Settings from**: an engine default (vLLM, SGLang, llama.cpp, MLX on a Mac) or, once you have
@@ -76,11 +76,12 @@ and restart the service.
 4. Check the **Command** shown below, then **Create**.
 5. Click **Start** on the new card. The status goes from *starting* to *loading* to *ready*.
 
-Every field by hand: **+ New recipe**.
+Every field by hand: **＋ Add recipe** → **Start from scratch**.
 
 !!! tip "Already have a start script?"
-    Use **📋 Import docker run / script…** instead of steps 1–3. Paste the script or `docker run`
-    command; it is checked for risky calls first and nothing in it is executed.
+    **＋ Add recipe** opens the import dialog directly. Paste the script, `docker run` command or a
+    compact JSON/YAML recipe file; scripts are checked for risky calls first and nothing in them is
+    executed. In the editor, **Recipe file…** exports the current settings the same way.
 
 When the model is ready, its OpenAI-compatible API is at the endpoint shown on the card:
 

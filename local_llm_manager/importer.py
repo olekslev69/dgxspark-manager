@@ -18,7 +18,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
-from .recipes import FRAMEWORKS, image_serves
+from .recipes import FRAMEWORKS, MANAGED_LABEL, image_serves
 
 RUN_TIMEOUT = 20
 
@@ -215,6 +215,28 @@ def _tildify(path: str) -> str:
     return path
 
 
+def _mount_to_volume(value: str) -> Optional[str]:
+    """`--mount type=bind,source=...,target=...` as a `-v source:target[:ro]` line, or None."""
+    parts: dict[str, str] = {}
+    for item in (value or "").split(","):
+        key, sep, val = item.partition("=")
+        key = key.strip().lower()
+        if key:
+            parts[key] = val.strip() if sep else "true"
+    if parts.get("type", "bind") != "bind":
+        return None
+    supported = {"type", "source", "src", "target", "dst", "destination", "readonly", "ro"}
+    if set(parts) - supported:
+        # Keep options such as bind-propagation intact as a Docker argument.
+        return None
+    source = parts.get("source") or parts.get("src")
+    target = parts.get("target") or parts.get("dst") or parts.get("destination")
+    if not source or not target:
+        return None
+    readonly = parts.get("readonly") in ("true", "1", "ro") or parts.get("ro") in ("true", "1")
+    return f"{_tildify(source)}:{target}" + (":ro" if readonly else "")
+
+
 def _split_opt(tok: str) -> tuple[str, Optional[str]]:
     if tok.startswith("--") and "=" in tok:
         k, v = tok.split("=", 1)
@@ -341,6 +363,23 @@ def recipe_from_argv(argv: list[str], description: str = "") -> tuple[dict[str, 
             name = val
         elif key == "--gpus":
             gpus = val
+        elif key in ("-l", "--label"):
+            # The manager adds its own labels when it starts the container.
+            label_key = (val or "").split("=", 1)[0]
+            if label_key != MANAGED_LABEL and not label_key.startswith(MANAGED_LABEL + "."):
+                docker_args += [key, val]
+        elif key == "--mount":
+            volume = _mount_to_volume(val or "")
+            if volume:
+                volumes.append(volume)
+            else:
+                docker_args += [key, val]
+                warnings.append(f"Kept --mount {val} as a Docker argument: only simple bind mounts with a "
+                                "source and target become volumes")
+        elif key == "--env-file":
+            docker_args += [key, val]
+            warnings.append(f"--env-file {val} is kept as a Docker argument; the file must exist on the "
+                            "recipe's host.")
         else:
             if key == "--entrypoint":
                 entrypoint = val

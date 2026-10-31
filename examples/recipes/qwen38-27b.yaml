@@ -1,0 +1,16 @@
+# Qwen3.8 27B served by vLLM.
+# Register the weights as "Qwen3.8-27B-NVFP4" in the Weights tab (or change `weights:` below).
+# Paste this file into Recipes -> Import; the vLLM preset fills in the command,
+# Docker flags, Hugging Face cache volume and HF_TOKEN.
+name: qwen3.8
+framework: vllm
+image: vllm/vllm-openai:v0.32.0
+weights: Qwen3.8-27B-NVFP4
+port: 8101
+args: |
+  --gpu-memory-utilization 0.4
+  --max-model-len 226000
+  --max-num-seqs 8
+  --served-model-name qwen3.8
+  --kv-cache-dtype fp8
+  --speculative-config '{"method":"mtp","num_speculative_tokens":4}'

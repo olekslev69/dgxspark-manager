@@ -1,0 +1,21 @@
+# The 27B vLLM recipe as exported from the manager. It uses {weights}; pick a
+# registered entry (e.g. Qwen3.8-27B-NVFP4) in the Weights tab after importing.
+# Compact recipe file (Local LLM Manager): paste into Recipes -> Import.
+name: qwen3.8
+description: Settings from vLLM.
+framework: vllm
+image: vllm/vllm-openai:v0.32.0
+command: '{model} --host {bind_host} --port {port}'
+args: |-
+  --gpu-memory-utilization 0.4
+  --max-model-len 226000
+  --max-num-seqs 8
+  --served-model-name qwen3.8
+  --kv-cache-dtype fp8
+  --speculative-config '{"method":"mtp","num_speculative_tokens":4}'
+volumes: |-
+  {weights}:/model:ro
+  ~/.cache/huggingface:/root/.cache/huggingface
+host_port: 8101
+model: /model
+pinned: true

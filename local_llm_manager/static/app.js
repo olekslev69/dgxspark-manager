@@ -727,7 +727,7 @@ function kindsHtml(items, hostId = "") {
 function renderRecipes() {
   renderToolbar();
   if (!state.recipes.length) {
-    $("#recipes").innerHTML = `<div class="empty">No recipes yet. Click “New recipe”.</div>`;
+    $("#recipes").innerHTML = `<div class="empty">No recipes yet. Click “Add recipe”.</div>`;
     return;
   }
   const list = visibleRecipes();
@@ -1007,6 +1007,7 @@ function applyFramework(name, overwriteAll) {
   ["args", "docker_args", "volumes", "env"].forEach((k) => set(k, p[k]));
   syncRuntime();
   setKind(recipeForm.elements.kind.value, true);
+  scheduleImageStatus();
 }
 
 // Ports are per host: the same port may be used on two different machines.
@@ -1108,18 +1109,19 @@ function openRecipeEditor(r, kind = "model", hostId = "") {
   // A new recipe usually starts from a command that already works: offer importing it first.
   $("#import-cta").classList.toggle("hidden", !!r);
   updateWeightsStatus();
+  scheduleImageStatus();
   syncHostNetworkPorts();
   updatePortHint();
   updatePreview();
   $("#dlg-recipe").showModal();
 }
 
-$("#btn-new-recipe").addEventListener("click", () => openRecipeEditor(null));
-$("#btn-import-recipe").addEventListener("click", () => { openRecipeEditor(null); openImport(); });
+$("#btn-add-recipe").addEventListener("click", () => { openRecipeEditor(null); openImport(); });
 
 $("#sel-host").addEventListener("change", (e) => {
   updatePortHint();
   updateWeightsStatus();
+  scheduleImageStatus();
   // New recipe moved to a Mac: switch to a native process (Docker on macOS has no GPU access).
   if (!editingRecipe && hostPlatform(e.target.value) === "darwin" && recipeForm.elements.runtime.value === "docker"
       && recipeForm.elements.kind.value !== "agent") {
@@ -1154,6 +1156,7 @@ function syncHostNetworkPorts() {
 recipeForm.addEventListener("input", () => {
   syncHostNetworkPorts();
   updatePortHint();
+  scheduleImageStatus();
   clearTimeout(previewTimer);
   previewTimer = setTimeout(updatePreview, 250);
 });
@@ -1188,6 +1191,62 @@ $("#btn-copy-preview").addEventListener("click", async () => {
   if (!cmd) return;
   try { await navigator.clipboard.writeText(cmd); toast("Command copied", "ok"); }
   catch { prompt("Copy the command:", cmd); }
+});
+
+/* Compact recipe files: the editor's fields as JSON/YAML, for another manager or examples/. */
+let exportFormat = "yaml";
+let exportSeq = 0;
+
+async function refreshExport() {
+  const seq = ++exportSeq;
+  const fw = recipeForm.elements.framework.value;
+  $("#export-framework").textContent = state.meta?.frameworks?.[fw]?.label || fw || "framework";
+  $("#export-text").value = "";
+  $("#export-error").textContent = "";
+  const id = editingRecipe ? `&recipe_id=${editingRecipe.id}` : "";
+  try {
+    const text = await api(`/api/recipes/export?format=${exportFormat}${id}`, { method: "POST", body: recipeFromForm() });
+    if (seq !== exportSeq) return;
+    $("#export-text").value = typeof text === "string" ? text : JSON.stringify(text, null, 2);
+    $("#export-error").textContent = "";
+  } catch (e) {
+    if (seq !== exportSeq) return;
+    $("#export-text").value = "";
+    $("#export-error").textContent = e.message;
+  }
+}
+
+$("#btn-export-recipe").addEventListener("click", () => {
+  $("#dlg-export").showModal();
+  refreshExport();
+});
+
+$("#export-format").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-format]");
+  if (!b || b.dataset.format === exportFormat) return;
+  exportFormat = b.dataset.format;
+  $$("#export-format button").forEach((x) => x.classList.toggle("on", x === b));
+  refreshExport();
+});
+
+$("#btn-export-copy").addEventListener("click", async () => {
+  const text = $("#export-text").value;
+  if (!text) return;
+  try { await navigator.clipboard.writeText(text); toast("Recipe file copied", "ok"); }
+  catch { prompt("Copy the recipe file:", text); }
+});
+
+$("#btn-export-download").addEventListener("click", () => {
+  const text = $("#export-text").value;
+  if (!text) return;
+  const ext = exportFormat === "json" ? "json" : "yaml";
+  const name = (recipeForm.elements.name.value || "recipe").replace(/[^a-zA-Z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "");
+  const blob = new Blob([text], { type: exportFormat === "json" ? "application/json" : "text/yaml" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${name || "recipe"}.${ext}`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 });
 
 recipeForm.addEventListener("submit", async (ev) => {
@@ -1298,6 +1357,51 @@ async function updateWeightsStatus() {
   } catch (e) {
     show("warn", esc(e.message));
   }
+}
+
+let imageCheckSeq = 0;
+let imageCheckTimer = null;
+
+async function updateImageStatus() {
+  const box = $("#image-status");
+  const f = recipeForm.elements;
+  const image = f.image.value.trim();
+  const hostId = Number(f.host_id.value) || state.hosts.find((h) => h.is_local)?.id;
+  const seq = ++imageCheckSeq;
+  if (f.runtime.value !== "docker" || !image || !hostId) {
+    box.textContent = "";
+    box.className = "port-hint";
+    return;
+  }
+  const host = esc(maskAddr(hostName(hostId)));
+  box.textContent = `Checking ${host}…`;
+  box.className = "port-hint";
+  try {
+    const c = await api(`/api/images/check?host_id=${hostId}&image=${encodeURIComponent(image)}`);
+    if (seq !== imageCheckSeq) return;
+    if (c.state === "present") {
+      const meta = c.local?.created ? ` · ${imageAge(c.local.created, true)}` : c.local?.size ? ` · ${c.local.size}` : "";
+      box.innerHTML = `✓ on ${host}${esc(meta)}`;
+      box.className = "port-hint ok";
+    } else if (c.state === "missing") {
+      const others = (c.other_tags || []).map((t) => t.tag);
+      const more = others.length ? ` (local: ${esc(others.slice(0, 4).join(", "))}${others.length > 4 ? ", …" : ""})` : "";
+      box.innerHTML = `✗ not on ${host} – Docker pulls it on first start${more}`;
+      box.className = "port-hint warn";
+    } else {
+      box.innerHTML = `? ${host} could not check${c.error ? ` (${esc(blurHostText(c.error, hostById(hostId)?.url))})` : ""}`;
+      box.className = "port-hint warn";
+    }
+  } catch (e) {
+    if (seq !== imageCheckSeq) return;
+    box.textContent = `? ${e.message}`;
+    box.className = "port-hint warn";
+  }
+}
+
+function scheduleImageStatus() {
+  clearTimeout(imageCheckTimer);
+  imageCheckTimer = setTimeout(updateImageStatus, 350);
 }
 
 $("#sel-weights").addEventListener("change", () => {
@@ -1548,11 +1652,21 @@ async function runImportCheck() {
 
 function openImport() {
   resetImportReport();
+  $("#import-alternatives").classList.toggle("hidden", !!editingRecipe);
   $("#dlg-import").showModal();
   $("#import-text").focus();
 }
 $("#btn-import").addEventListener("click", openImport);
 $("#import-cta [data-import]").addEventListener("click", openImport);
+$("#btn-import-manual").addEventListener("click", () => $("#dlg-import").close());
+$("#btn-import-cancel").addEventListener("click", () => {
+  if (!editingRecipe && $("#dlg-recipe").open) $("#dlg-recipe").close();
+});
+$("#btn-import-quick").addEventListener("click", () => {
+  $("#dlg-import").close();
+  if ($("#dlg-recipe").open) $("#dlg-recipe").close();
+  openQuick();
+});
 
 $("#import-text").addEventListener("input", resetImportReport);
 
@@ -1589,6 +1703,7 @@ $("#form-import").addEventListener("submit", async (ev) => {
     const adopted = useRegisteredWeights();
     syncHostNetworkPorts();
     updateWeightsStatus();
+    scheduleImageStatus();
     const skipped = res.skipped_calls || [];
     const riskCount = res.check?.count ?? 0;
     showRecipeNote([
@@ -1968,7 +2083,6 @@ async function openQuick() {
   } catch { /* the registered weights and "Other" still work */ }
 }
 
-$("#btn-quick-recipe").addEventListener("click", openQuick);
 $("#quick-host").addEventListener("change", () => {
   renderQuickModels();
   renderQuickBases();
@@ -2780,12 +2894,12 @@ document.addEventListener("keydown", (ev) => {
   }
   if (TAB_KEYS[k]) { $(`.tab[data-tab="${TAB_KEYS[k]}"]`).click(); ev.preventDefault(); return; }
   if (k === "/") { $('.tab[data-tab="recipes"]').click(); $("#recipe-search").focus(); ev.preventDefault(); return; }
-  if (k === "n" && state.tab === "recipes") { $("#btn-new-recipe").click(); ev.preventDefault(); return; }
-  if (k === "i" && state.tab === "recipes") { $("#btn-import-recipe").click(); ev.preventDefault(); return; }
-  if (k === "q" && state.tab === "recipes") { $("#btn-quick-recipe").click(); ev.preventDefault(); return; }
+  if (k === "n" && state.tab === "recipes") { openRecipeEditor(null); ev.preventDefault(); return; }
+  if (k === "i" && state.tab === "recipes") { $("#btn-add-recipe").click(); ev.preventDefault(); return; }
+  if (k === "q" && state.tab === "recipes") { openQuick(); ev.preventDefault(); return; }
   if (k === "t") { $("#btn-theme").click(); return; }
   if (k === "b") { $("#btn-blur").click(); return; }
-  if (k === "?") { toast("Shortcuts: 1–6 tabs · / search · q quick recipe · n new recipe · i import a docker run / script · arrows move between cards · s start, x stop, r restart, l logs, e edit on the focused card · t theme · b blur"); return; }
+  if (k === "?") { toast("Shortcuts: 1–6 tabs · / search · i add/import a recipe · n new recipe · q quick recipe · arrows move between cards · s start, x stop, r restart, l logs, e edit on the focused card · t theme · b blur"); return; }
 });
 
 /* ---------------- boot ---------------- */
